@@ -33,7 +33,7 @@ export const myFriendRouter = router({
          *
          * Instructions:
          *  - Go to src/server/tests/friendship-request.test.ts, enable the test
-         * scenario for Question 3
+         * scenario for Question 4
          *  - Run `yarn test` to verify your answer
          *
          * Documentation references:
@@ -45,6 +45,35 @@ export const myFriendRouter = router({
           .innerJoin(
             userTotalFriendCount(conn).as('userTotalFriendCount'),
             'userTotalFriendCount.userId',
+            'friends.id'
+          )
+          .leftJoin(
+            conn
+              .selectFrom('friendships as f1')
+              .innerJoin('friendships as f2', (join) =>
+                join
+                  .onRef('f2.friendUserId', '=', 'f1.userId')
+                  .onRef('f2.userId', '=', 'f1.friendUserId')
+              )
+              .where('f1.userId', '=', ctx.session.userId)
+              .where('f2.userId', '=', input.friendUserId)
+              .where(
+                'f1.status',
+                '=',
+                FriendshipStatusSchema.Values['accepted']
+              )
+              .where(
+                'f2.status',
+                '=',
+                FriendshipStatusSchema.Values['accepted']
+              )
+              .select((eb) => [
+                'f1.friendUserId',
+                eb.fn.count('f1.friendUserId').as('mutualFriendCount'),
+              ])
+              .groupBy('f1.friendUserId')
+              .as('mutualFriends'),
+            'mutualFriends.friendUserId',
             'friends.id'
           )
           .where('friendships.userId', '=', ctx.session.userId)
@@ -59,6 +88,7 @@ export const myFriendRouter = router({
             'friends.fullName',
             'friends.phoneNumber',
             'totalFriendCount',
+            'mutualFriends.mutualFriendCount',
           ])
           .executeTakeFirstOrThrow(() => new TRPCError({ code: 'NOT_FOUND' }))
           .then(

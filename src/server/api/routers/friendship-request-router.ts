@@ -79,6 +79,29 @@ export const friendshipRequestRouter = router({
        * scenario for Question 3
        *  - Run `yarn test` to verify your answer
        */
+
+      // Find the declined friend request
+      const declinedRequest = await ctx.db
+        .selectFrom('friendships')
+        .select('id')
+        .where('userId', '=', ctx.session.userId)
+        .where('friendUserId', '=', input.friendUserId)
+        .where(
+          'friendships.status',
+          '=',
+          FriendshipStatusSchema.Values['declined']
+        )
+        .executeTakeFirst()
+
+      // Delete the declined request if exists
+      if (declinedRequest) {
+        await ctx.db
+          .deleteFrom('friendships')
+          .where('id', '=', declinedRequest.id)
+          .execute()
+      }
+
+      // Add new friend request
       return ctx.db
         .insertInto('friendships')
         .values({
@@ -117,6 +140,50 @@ export const friendshipRequestRouter = router({
          *  - https://kysely-org.github.io/kysely/classes/Kysely.html#insertInto
          *  - https://kysely-org.github.io/kysely/classes/Kysely.html#updateTable
          */
+
+        // Update the friendship request to have status `accepted`
+        await t
+          .updateTable('friendships')
+          .set({
+            status: FriendshipStatusSchema.Values['accepted'],
+          })
+          .where('friendships.userId', '=', input.friendUserId)
+          .where('friendships.friendUserId', '=', ctx.session.userId)
+          .where(
+            'friendships.status',
+            '=',
+            FriendshipStatusSchema.Values['requested']
+          )
+          .execute()
+
+        // Check own request record exist ?
+        const existingOwnRequest = await t
+          .selectFrom('friendships')
+          .select('id')
+          .where('friendships.userId', '=', ctx.session.userId)
+          .where('friendships.friendUserId', '=', input.friendUserId)
+          .executeTakeFirst()
+
+        if (!existingOwnRequest) {
+          // If record not exists, add new record
+          await t
+            .insertInto('friendships')
+            .values({
+              userId: ctx.session.userId,
+              friendUserId: input.friendUserId,
+              status: FriendshipStatusSchema.Values['accepted'],
+            })
+            .execute()
+        } else {
+          // If record exists, update status to `accepted`
+          await t
+            .updateTable('friendships')
+            .set({
+              status: FriendshipStatusSchema.Values['accepted'],
+            })
+            .where('friendships.id', '=', existingOwnRequest.id)
+            .execute()
+        }
       })
     }),
 
@@ -137,5 +204,20 @@ export const friendshipRequestRouter = router({
        * Documentation references:
        *  - https://vitest.dev/api/#test-skip
        */
+
+      await ctx.db.transaction().execute(async (t) => {
+        t.updateTable('friendships')
+          .set({
+            status: FriendshipStatusSchema.Values['declined'],
+          })
+          .where('friendships.friendUserId', '=', ctx.session.userId)
+          .where('friendships.userId', '=', input.friendUserId)
+          .where(
+            'friendships.status',
+            '=',
+            FriendshipStatusSchema.Values['requested']
+          )
+          .execute()
+      })
     }),
 })
