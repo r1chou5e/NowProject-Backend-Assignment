@@ -50,13 +50,13 @@ export const myFriendRouter = router({
           .leftJoin(
             conn
               .selectFrom('friendships as f1')
-              .innerJoin('friendships as f2', (join) =>
-                join
-                  .onRef('f2.friendUserId', '=', 'f1.userId')
-                  .onRef('f2.userId', '=', 'f1.friendUserId')
+              .innerJoin(
+                'friendships as f2',
+                'f2.friendUserId',
+                'f1.friendUserId'
               )
-              .where('f1.userId', '=', ctx.session.userId)
-              .where('f2.userId', '=', input.friendUserId)
+              .where('f1.userId', '=', input.friendUserId)
+              .where('f2.userId', '=', ctx.session.userId)
               .where(
                 'f1.status',
                 '=',
@@ -68,12 +68,12 @@ export const myFriendRouter = router({
                 FriendshipStatusSchema.Values['accepted']
               )
               .select((eb) => [
-                'f1.friendUserId',
+                'f1.userId',
                 eb.fn.count('f1.friendUserId').as('mutualFriendCount'),
               ])
-              .groupBy('f1.friendUserId')
+              .groupBy('f1.userId')
               .as('mutualFriends'),
-            'mutualFriends.friendUserId',
+            'mutualFriends.userId',
             'friends.id'
           )
           .where('friendships.userId', '=', ctx.session.userId)
